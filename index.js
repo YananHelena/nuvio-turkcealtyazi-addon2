@@ -1,6 +1,45 @@
+const express = require('express');
+const axios = require('axios');
+const cheerio = require('cheerio');
+
+const app = express();
+const PORT = process.env.PORT || 10000;
+
+// Render çökmelerini yakalamak için güvenlik duvarı
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// Stremio / Nuvio Manifestosu
+const manifest = {
+  id: 'org.turkcealtyazi.stremio',
+  version: '2.0.0',
+  name: 'Türkçe Altyazı',
+  description: 'türkçealtyazi.org üzerinden yüksek kaliteli Türkçe altyazılar sağlar.',
+  resources: ['subtitles'],
+  types: ['movie', 'series'],
+  idPrefixes: ['tt'],
+};
+
+// Kök Dizin
+app.get('/', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.send('Türkçe Altyazı Addon aktif! Eklenti manifest adresi: /manifest.json');
+});
+
+// Manifest Rotası
+app.get('/manifest.json', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  res.json(manifest);
+});
+
+// Altyazı Arama ve Parse Etme Mantığı (403 Korumalı)
 async function fetchSubtitles(imdbId, type, query) {
   try {
-    // Dizi ID'lerinde gelen sezon/bölüm eklerini (örn: tt2802850:1:1) temizleyip sadece ana IMDB ID'sini alıyoruz
     const cleanImdbId = imdbId.split(':')[0];
     const searchUrl = `https://turkcealtyazi.org/find.php?cat=mov&find=${cleanImdbId}`;
 
@@ -40,3 +79,28 @@ async function fetchSubtitles(imdbId, type, query) {
     return [];
   }
 }
+
+// Express 5 Uyumlu Altyazı Rotaları
+app.get(['/subtitles/:type/:imdbId.json', '/subtitles/:type/:imdbId/:query.json'], async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+
+  const { type, imdbId } = req.params;
+  const query = req.params.query || '';
+
+  console.log(`İstek geldi -> Tip: ${type}, ID: ${imdbId}, Query: ${query}`);
+
+  try {
+    const subtitles = await fetchSubtitles(imdbId, type, query);
+    res.setHeader('Cache-Control', 'max-age=3600');
+    return res.json({ subtitles });
+  } catch (error) {
+    console.error('Handler error:', error.message);
+    return res.status(502).json({ subtitles: [] });
+  }
+});
+
+// Render için 0.0.0.0 binding şartı
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Addon listening on port ${PORT}`);
+});
