@@ -15,6 +15,10 @@ process.on('unhandledRejection', (reason) => {
 const cache = new Map();
 const CACHE_TTL = 12 * 60 * 60 * 1000; // 12 Saat
 
+// Cloudflare Worker URL'ini Environment Variable (Render Environment) üzerinden alıyoruz.
+// Eğer Render'da WORKER_URL tanımlı değilse doğrudan fallback olarak eklediğin linki kullanır.
+const WORKER_URL = process.env.WORKER_URL || 'https://addon-1wm.pages.dev';
+
 const manifest = {
   id: 'org.turkcealtyazi.stremio',
   version: '2.0.0',
@@ -27,7 +31,7 @@ const manifest = {
 
 app.get('/', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.send('Türkçe Altyazı Addon aktif ve çalışır durumda!');
+  res.send('Türkçe Altyazı Addon aktif ve Cloudflare Worker modunda çalışıyor!');
 });
 
 app.get('/manifest.json', (req, res) => {
@@ -50,13 +54,8 @@ async function fetchSubtitles(imdbId, type, query) {
   }
 
   try {
-    const targetUrl = `https://turkcealtyazi.org/find.php?cat=mov&find=${cleanImdbId}`;
-    // Render IP engelini aşmak için genel bir proxy tüneli kullanıyoruz
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
-
-    const { data: html } = await axios.get(proxyUrl, {
-      timeout: 15000,
-    });
+    const requestUrl = `${WORKER_URL}/?id=${cleanImdbId}`;
+    const { data: html } = await axios.get(requestUrl, { timeout: 15000 });
 
     const $ = cheerio.load(html);
     const subtitles = [];
