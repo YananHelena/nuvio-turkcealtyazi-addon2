@@ -5,13 +5,18 @@ const cheerio = require('cheerio');
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// Render çökmelerini yakalamak için güvenlik duvarı
+// Sunucu çökmelerini önleyen global yakalayıcılar
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
 });
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection:', reason);
 });
+
+// Basit ve etkili bir Bellek İçi Önbellek (In-Memory Cache) Mekanizması
+// Hedef sitenin bot korumasına (403) takılmamak için başarılı sonuçları 12 saat boyunca bellekte tutar.
+const cache = new Map();
+const CACHE_TTL = 12 * 60 * 60 * 1000; // 12 Saat
 
 // Stremio / Nuvio Manifestosu
 const manifest = {
@@ -27,7 +32,7 @@ const manifest = {
 // Kök Dizin
 app.get('/', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.send('Türkçe Altyazı Addon aktif! Eklenti manifest adresi: /manifest.json');
+  res.send('Türkçe Altyazı Addon aktif ve çalışır durumda!');
 });
 
 // Manifest Rotası
@@ -37,18 +42,40 @@ app.get('/manifest.json', (req, res) => {
   res.json(manifest);
 });
 
-// Altyazı Arama ve Parse Etme Mantığı (403 Korumalı)
+// Altyazı Arama ve Parse Etme Mantığı (Önbellek ve Gelişmiş Başlık Korumalı)
 async function fetchSubtitles(imdbId, type, query) {
+  const cleanImdbId = imdbId.split(':')[0];
+  const cacheKey = `${type}_${cleanImdbId}`;
+
+  // 1. Önbellek kontrolü (Eğer daha önce çekildiyse siteye tekrar istek atılmadan cache'den döner, 403 riskini sıfırlar)
+  if (cache.has(cacheKey)) {
+    const cachedData = cache.get(cacheKey);
+    if (Date.now() - cachedData.timestamp < CACHE_TTL) {
+      console.log(`Önbellekten servis ediliyor -> ID: ${cleanImdbId}`);
+      return cachedData.subtitles;
+    } else {
+      cache.delete(cacheKey);
+    }
+  }
+
   try {
-    const cleanImdbId = imdbId.split(':')[0];
     const searchUrl = `https://turkcealtyazi.org/find.php?cat=mov&find=${cleanImdbId}`;
 
     const { data: html } = await axios.get(searchUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
         'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br',
         'Referer': 'https://turkcealtyazi.org/',
+        'Sec-Ch-Ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'same-origin',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache',
       },
@@ -73,9 +100,15 @@ async function fetchSubtitles(imdbId, type, query) {
       });
     });
 
+    // Sonucu önbelleğe kaydet
+    cache.set(cacheKey, {
+      subtitles,
+      timestamp: Date.now(),
+    });
+
     return subtitles;
   } catch (error) {
-    console.error('Scraping error:', error.message);
+    console.error(`Scraping error (${cleanImdbId}):`, error.message);
     return [];
   }
 }
@@ -100,7 +133,6 @@ app.get(['/subtitles/:type/:imdbId.json', '/subtitles/:type/:imdbId/:query.json'
   }
 });
 
-// Render için 0.0.0.0 binding şartı
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Addon listening on port ${PORT}`);
 });
