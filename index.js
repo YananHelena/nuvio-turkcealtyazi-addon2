@@ -16,6 +16,13 @@ const manifest = {
   idPrefixes: ['tt'],
 };
 
+// Kök Dizin (Cannot GET / hatasını önlemek için bilgilendirme mesajı)
+app.get('/', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.send('Türkçe Altyazı Addon aktif! Eklenti manifest adresi: /manifest.json');
+});
+
+// Manifest Rotası
 app.get('/manifest.json', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
@@ -58,7 +65,7 @@ async function fetchSubtitles(imdbId, type, query) {
   }
 }
 
-// Express 5 Uyumlu Rota
+// Express 5 Uyumlu Altyazı Rotaları
 app.get(['/subtitles/:type/:imdbId.json', '/subtitles/:type/:imdbId/:query.json'], async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
