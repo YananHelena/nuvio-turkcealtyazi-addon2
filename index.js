@@ -15,9 +15,8 @@ process.on('unhandledRejection', (reason) => {
 const cache = new Map();
 const CACHE_TTL = 12 * 60 * 60 * 1000; // 12 Saat
 
-// Cloudflare Worker URL'ini Environment Variable (Render Environment) üzerinden alıyoruz.
-// Eğer Render'da WORKER_URL tanımlı değilse doğrudan fallback olarak eklediğin linki kullanır.
-const WORKER_URL = process.env.WORKER_URL || 'https://addon-1wm.pages.dev';
+// Yeni Cloudflare Worker adresimiz
+const WORKER_URL = process.env.WORKER_URL || 'https://addon.tilekbatuhan.workers.dev';
 
 const manifest = {
   id: 'org.turkcealtyazi.stremio',
